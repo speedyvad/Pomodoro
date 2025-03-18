@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Pomodoro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #e74c3c;
+            margin-bottom: 25px;
+        }
+
+        .timer-display {
+            font-size: 72px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 20px 0;
+        }
+
+        .status {
+            font-size: 20px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #c0392b;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .settings {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .settings-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 15px;
+        }
+
+        label {
+            text-align: left;
+            margin-bottom: 5px;
+            color: #7f8c8d;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: #e74c3c;
+            width: 0%;
+            transition: width 1s linear;
+        }
+
+        .cycles-count {
+            font-size: 16px;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Timer Pomodoro</h1>
+        
+        <div class="status" id="status">Configure o temporizador</div>
+        
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        
+        <div class="timer-display" id="timer">25:00</div>
+        
+        <div class="cycles-count" id="cycles">Ciclos completados: 0</div>
+        
+        <div class="controls">
+            <button id="startBtn">Iniciar</button>
+            <button id="pauseBtn" disabled>Pausar</button>
+            <button id="resetBtn">Resetar</button>
+        </div>
+        
+        <div class="settings">
+            <div class="settings-title">Configurações</div>
+            
+            <div class="input-group">
+                <label for="workTime">Tempo de trabalho (minutos):</label>
+                <input type="number" id="workTime" min="1" max="60" value="25">
+            </div>
+            
+            <div class="input-group">
+                <label for="shortBreakTime">Intervalo curto (minutos):</label>
+                <input type="number" id="shortBreakTime" min="1" max="30" value="5">
+            </div>
+            
+            <div class="input-group">
+                <label for="longBreakTime">Intervalo longo (minutos):</label>
+                <input type="number" id="longBreakTime" min="1" max="60" value="15">
+            </div>
+            
+            <div class="input-group">
+                <label for="cyclesBeforeLongBreak">Ciclos antes do intervalo longo:</label>
+                <input type="number" id="cyclesBeforeLongBreak" min="1" max="10" value="4">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elementos DOM
+            const timerDisplay = document.getElementById('timer');
+            const startBtn = document.getElementById('startBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const statusDisplay = document.getElementById('status');
+            const progressBar = document.getElementById('progress');
+            const cyclesDisplay = document.getElementById('cycles');
+            
+            // Inputs de configuração
+            const workTimeInput = document.getElementById('workTime');
+            const shortBreakTimeInput = document.getElementById('shortBreakTime');
+            const longBreakTimeInput = document.getElementById('longBreakTime');
+            const cyclesBeforeLongBreakInput = document.getElementById('cyclesBeforeLongBreak');
+            
+            // Variáveis do timer
+            let timer;
+            let isRunning = false;
+            let isPaused = false;
+            let timeLeft = 0;
+            let totalTime = 0;
+            let currentMode = 'work';  // 'work', 'shortBreak', 'longBreak'
+            let completedCycles = 0;
+            let completedPomodoros = 0;
+            
+            // Som de notificação
+            const alarmSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            
+            // Função para atualizar o display do timer
+            function updateTimerDisplay(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                timerDisplay.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            // Função para iniciar o timer
+            function startTimer() {
+                if (isRunning && !isPaused) return;
+                
+                if (!isPaused) {
+                    // Se não estiver pausado, configura um novo temporizador
+                    switch (currentMode) {
+                        case 'work':
+                            timeLeft = workTimeInput.value * 60;
+                            statusDisplay.textContent = 'Trabalhando';
+                            document.title = 'Trabalhando | Pomodoro';
+                            break;
+                        case 'shortBreak':
+                            timeLeft = shortBreakTimeInput.value * 60;
+                            statusDisplay.textContent = 'Intervalo Curto';
+                            document.title = 'Intervalo Curto | Pomodoro';
+                            break;
+                        case 'longBreak':
+                            timeLeft = longBreakTimeInput.value * 60;
+                            statusDisplay.textContent = 'Intervalo Longo';
+                            document.title = 'Intervalo Longo | Pomodoro';
+                            break;
+                    }
+                    totalTime = timeLeft;
+                }
+                
+                isRunning = true;
+                isPaused = false;
+                
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                
+                // Desabilitar inputs durante o temporizador
+                toggleInputs(false);
+                
+                timer = setInterval(function() {
+                    timeLeft--;
+                    updateTimerDisplay(timeLeft);
+                    updateProgressBar();
+                    
+                    if (timeLeft <= 0) {
+                        clearInterval(timer);
+                        alarmSound.play();
+                        nextMode();
+                    }
+                }, 1000);
+            }
+            
+            // Função para pausar o timer
+            function pauseTimer() {
+                if (!isRunning) return;
+                
+                clearInterval(timer);
+                isPaused = true;
+                
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                
+                statusDisplay.textContent = 'Pausado';
+                document.title = 'Pausado | Pomodoro';
+            }
+            
+            // Função para resetar o timer
+            function resetTimer() {
+                clearInterval(timer);
+                isRunning = false;
+                isPaused = false;
+                
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                
+                currentMode = 'work';
+                timeLeft = workTimeInput.value * 60;
+                totalTime = timeLeft;
+                
+                updateTimerDisplay(timeLeft);
+                updateProgressBar();
+                
+                statusDisplay.textContent = 'Configure o temporizador';
+                document.title = 'Timer Pomodoro';
+                
+                // Habilitar inputs novamente
+                toggleInputs(true);
+            }
+            
+            // Função para alternar para o próximo modo
+            function nextMode() {
+                if (currentMode === 'work') {
+                    completedPomodoros++;
+                    updateCyclesDisplay();
+                    
+                    if (completedPomodoros % cyclesBeforeLongBreakInput.value === 0) {
+                        currentMode = 'longBreak';
+                        completedCycles++;
+                    } else {
+                        currentMode = 'shortBreak';
+                    }
+                } else {
+                    currentMode = 'work';
+                }
+                
+                isRunning = false;
+                isPaused = false;
+                
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                
+                // Habilitar inputs durante as trocas de modo
+                toggleInputs(true);
+                
+                // Configurar o novo temporizador
+                switch (currentMode) {
+                    case 'work':
+                        timeLeft = workTimeInput.value * 60;
+                        statusDisplay.textContent = 'Hora de trabalhar! Clique em Iniciar';
+                        document.title = 'Trabalho Pronto | Pomodoro';
+                        break;
+                    case 'shortBreak':
+                        timeLeft = shortBreakTimeInput.value * 60;
+                        statusDisplay.textContent = 'Intervalo curto! Clique em Iniciar';
+                        document.title = 'Intervalo Pronto | Pomodoro';
+                        break;
+                    case 'longBreak':
+                        timeLeft = longBreakTimeInput.value * 60;
+                        statusDisplay.textContent = 'Intervalo longo! Clique em Iniciar';
+                        document.title = 'Intervalo Longo Pronto | Pomodoro';
+                        break;
+                }
+                
+                totalTime = timeLeft;
+                updateTimerDisplay(timeLeft);
+                updateProgressBar();
+            }
+            
+            // Função para atualizar a barra de progresso
+            function updateProgressBar() {
+                const progressPercentage = (1 - (timeLeft / totalTime)) * 100;
+                progressBar.style.width = `${progressPercentage}%`;
+            }
+            
+            // Função para atualizar o contador de ciclos
+            function updateCyclesDisplay() {
+                cyclesDisplay.textContent = `Pomodoros completados: ${completedPomodoros} | Ciclos completos: ${completedCycles}`;
+            }
+            
+            // Função para habilitar/desabilitar os inputs de configuração
+            function toggleInputs(enabled) {
+                workTimeInput.disabled = !enabled;
+                shortBreakTimeInput.disabled = !enabled;
+                longBreakTimeInput.disabled = !enabled;
+                cyclesBeforeLongBreakInput.disabled = !enabled;
+            }
+            
+            // Event listeners
+            startBtn.addEventListener('click', startTimer);
+            pauseBtn.addEventListener('click', pauseTimer);
+            resetBtn.addEventListener('click', resetTimer);
+            
+            // Inicializar o timer
+            updateTimerDisplay(workTimeInput.value * 60);
+            updateCyclesDisplay();
+            
+            // Event listeners para atualizar o timer quando as configurações forem alteradas
+            workTimeInput.addEventListener('change', function() {
+                if (!isRunning && currentMode === 'work') {
+                    timeLeft = workTimeInput.value * 60;
+                    totalTime = timeLeft;
+                    updateTimerDisplay(timeLeft);
+                    updateProgressBar();
+                }
+            });
+            
+            shortBreakTimeInput.addEventListener('change', function() {
+                if (!isRunning && currentMode === 'shortBreak') {
+                    timeLeft = shortBreakTimeInput.value * 60;
+                    totalTime = timeLeft;
+                    updateTimerDisplay(timeLeft);
+                    updateProgressBar();
+                }
+            });
+            
+            longBreakTimeInput.addEventListener('change', function() {
+                if (!isRunning && currentMode === 'longBreak') {
+                    timeLeft = longBreakTimeInput.value * 60;
+                    totalTime = timeLeft;
+                    updateTimerDisplay(timeLeft);
+                    updateProgressBar();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
